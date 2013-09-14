@@ -1,0 +1,66 @@
+Name:                quarry
+Version:             0.1.0
+Synopsis:            synopsis
+Description:         
+License:             BSD3
+License-file:        LICENSE
+Copyright:           Vincent Hanquez <vincent@snarc.org>
+Author:              Vincent Hanquez <vincent@snarc.org>
+Maintainer:          vincent@snarc.org
+Category:            
+Stability:           experimental
+Build-Type:          Simple
+Homepage:            http://github.com/vincenthz/quarry
+Cabal-Version:       >=1.8
+data-files:          README.md
+
+Library
+  Exposed-modules:   Tools.Quarry
+  Other-modules:     Tools.Quarry.Monad
+                   , Tools.Quarry.Types
+                   , Tools.Quarry.DB
+                   , Storage.HashFS
+                   , Storage.HashFS.Monad
+                   , Storage.HashFS.Path
+                   , Storage.HashFS.Types
+                   , Storage.HashFS.Utils
+  Build-depends:     base >= 4 && < 5
+                   , bytestring
+                   , cryptohash
+                   , mtl
+                   , filepath
+                   , directory
+                   , HDBC
+                   , HDBC-sqlite3
+                   , fileformat
+                   , time
+                   -- hashfs extra deps
+                   , unix
+                   , base64-bytestring
+                   , byteable
+  ghc-options:       -Wall -fwarn-tabs
+
+Executable quarry
+  Main-Is:           Quarry.hs
+  ghc-options:       -Wall -fno-warn-missing-signatures
+  Hs-Source-Dirs:    src
+  Build-depends:     base >= 4 && < 5
+                   , mtl
+                   , quarry
+
+--Test-Suite test-quarry
+--  type:              exitcode-stdio-1.0
+--  hs-source-dirs:    tests
+--  Main-is:           Tests.hs
+--  Build-Depends:     base >= 3 && < 5
+--                   , mtl
+--                   , QuickCheck >= 2
+--                   , HUnit
+--                   , test-framework
+--                   , test-framework-quickcheck2
+--                   , test-framework-hunit
+--  ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures
+
+source-repository head
+  type: git
+  location: git://github.com/vincenthz/quarry

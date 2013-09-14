@@ -1,0 +1,1 @@
+echo ".dump" | sqlite3 $1quarry.db
