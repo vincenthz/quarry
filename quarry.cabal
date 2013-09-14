@@ -1,13 +1,13 @@
 Name:                quarry
 Version:             0.1.0
-Synopsis:            synopsis
-Description:         
+Synopsis:            filesystem and database experiments
+Description:         filesystem and database experiments
 License:             BSD3
 License-file:        LICENSE
 Copyright:           Vincent Hanquez <vincent@snarc.org>
 Author:              Vincent Hanquez <vincent@snarc.org>
 Maintainer:          vincent@snarc.org
-Category:            
+Category:            Storage
 Stability:           experimental
 Build-Type:          Simple
 Homepage:            http://github.com/vincenthz/quarry
