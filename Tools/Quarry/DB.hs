@@ -88,9 +88,12 @@ dbCreateTag :: Tag -> QuarryM KeyTag
 dbCreateTag tag = do
     mt <- dbFindTag tag
     case mt of
-        Nothing -> withDB $ \conn -> liftIO $ do
-                        stmt <- prepare conn queryInsertTag
-                        KeyTag <$> insertAndGetID conn stmt [toSql (tagName tag), toSql (tagCat tag)]
+        Nothing -> do cat <- dbFindCategory (tagCat tag)
+                      case cat of
+                            Nothing -> undefined
+                            Just c  -> withDB $ \conn -> liftIO $ do
+                                        stmt <- prepare conn queryInsertTag
+                                        KeyTag <$> insertAndGetID conn stmt [toSql (tagName tag), toSql $ getPrimaryKey c]
         Just t  -> return t
   where queryInsertTag = "INSERT INTO tag (name, category) VALUES (?, ?)"
 
@@ -98,6 +101,14 @@ dbGetCategories :: QuarryM [(KeyCategory, Category)]
 dbGetCategories = withDB $ \conn -> liftIO $ getTableMap conn tableCategory KeyCategory toVal
   where toVal [SqlString name] = name
         toVal r                = error $ "unexpected value in category table: " ++ show r
+
+dbFindCategory :: Category -> QuarryM (Maybe KeyCategory)
+dbFindCategory cat = withDB $ \conn -> do
+    r <- liftIO $ quickQuery conn ("SELECT id FROM category WHERE name='" ++ cat ++ "'") []
+    case r of
+        []      -> return Nothing
+        [[uid]] -> return $ Just $ KeyCategory $ fromSql uid
+        _       -> error ("dbFindCategory: " ++ show cat ++ " unexpected sql output format " ++ show r)
 
 -- | Try to find the key associated to a Tag
 --
@@ -117,12 +128,14 @@ dbFindTag tag = withDB $ \conn -> do
 -- * doesn't work if both Nothing
 --
 dbFindTagsMatching :: Maybe String -> Maybe Category -> QuarryM [(KeyCategory, TagName)]
-dbFindTagsMatching nameConstraint categoryConstraint = withDB $ \conn -> do
-    r <- liftIO $ quickQuery conn query []
-    return $ map (\[rcat, rname] -> (KeyCategory $ fromSql rcat, fromSql rname)) r
-  where query = "SELECT category, name FROM tag WHERE " ++
+dbFindTagsMatching nameConstraint categoryConstraint = do
+    mcat <- maybe (return Nothing) (\x -> dbFindCategory x) categoryConstraint
+    withDB $ \conn -> do
+        r <- liftIO $ quickQuery conn (query mcat) []
+        return $ map (\[rcat, rname] -> (KeyCategory $ fromSql rcat, fromSql rname)) r
+  where query mcat = "SELECT tag.category, tag.name FROM tag WHERE " ++
                 maybe "" (\s -> "name LIKE '" ++ s ++ "%'") nameConstraint ++
-                maybe "" (\s -> " AND category='" ++ s ++ "'") categoryConstraint
+                maybe "" (\k -> " AND category=" ++ show (getPrimaryKey k) ++ "") mcat
 
 -- | add a Tag on some data
 dbAddTag :: KeyData -> KeyTag -> QuarryM ()
