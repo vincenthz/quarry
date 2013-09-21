@@ -1,18 +1,17 @@
 module Tools.Quarry.Types where
 
-import Database.HDBC.Sqlite3 (Connection)
 import Crypto.Hash (SHA512, Digest)
-import Storage.HashFS (HashFSConf)
 
-type QuarryDB = Connection
-type Tag = String
+type TagName = String
+type Category = String
+
+data Tag = Tag { tagName :: TagName, tagCat :: Category }
+    deriving (Eq)
+
+instance Show Tag where
+    show tag = tagCat tag ++ ":" ++ tagName tag
+
 type QuarryDigest = Digest SHA512
-
--- | Config
-data QuarryConfig = QuarryConfig
-    { connection :: Connection
-    , hashfsConf :: HashFSConf SHA512
-    }
 
 data QuarryFileType =
       QuarryTypeImage

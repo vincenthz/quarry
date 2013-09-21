@@ -18,7 +18,11 @@ Library
   Exposed-modules:   Tools.Quarry
   Other-modules:     Tools.Quarry.Monad
                    , Tools.Quarry.Types
+                   , Tools.Quarry.Config
+                   , Tools.Quarry.DB.Types
                    , Tools.Quarry.DB
+                   , Tools.Quarry.DBHelper
+                   , Tools.Quarry.Cache
                    , Storage.HashFS
                    , Storage.HashFS.Monad
                    , Storage.HashFS.Path
@@ -30,8 +34,11 @@ Library
                    , mtl
                    , filepath
                    , directory
+                   , containers
+                   , convertible
                    , HDBC
                    , HDBC-sqlite3
+                   , esqueleto
                    , fileformat
                    , time
                    -- hashfs extra deps

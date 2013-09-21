@@ -5,7 +5,7 @@ module Tools.Quarry.Monad
 
 import Control.Applicative
 import Control.Monad.Reader
-import Tools.Quarry.Types
+import Tools.Quarry.Config
 
 -- | Quarry Monad
 newtype QuarryM a = QuarryM { runQuarryM :: ReaderT QuarryConfig IO a }

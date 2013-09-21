@@ -1,10 +1,17 @@
 module Tools.Quarry
     ( initialize
+    , KeyCategory
+    , KeyTag
+    , TagName
+    , Tag(..)
+    , DataCategory(..)
     , QuarryConfig
     , runQuarry
     , importFile
     , updateDigest
     , resolveDigest
+    , resolveTag
+    , getCategoryTable
     , findDigestWithTags
     , readDigest
     , findTags
@@ -22,6 +29,8 @@ import System.Directory
 import Database.HDBC.Sqlite3 (connectSqlite3)
 
 import Tools.Quarry.Types
+import Tools.Quarry.Cache
+import Tools.Quarry.Config
 import Tools.Quarry.Monad
 import Tools.Quarry.DB
 import Data.FileFormat
@@ -35,23 +44,20 @@ runHFS f = ask >>= \conf -> liftIO $ HFS.run f (hashfsConf conf)
 --getRootPath = runHFS (HFS.hashfsRoot <$> ask)
 
 initialize :: Bool -> FilePath -> IO QuarryConfig
-initialize wantNew root
-    | wantNew = do
-        hasDb <- doesFileExist (dbFile root)
-        when hasDb $ error "look like it's already initialized"
-        HFS.run HFS.initialize quarryHashFSConf
-        conn <- connectSqlite3 (dbFile root)
-        dbCreateTables conn
-        return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf }
-    | otherwise = do
-        hasDb <- doesFileExist (dbFile root)
-        when (not hasDb) $ error "look like no DB"
-        conn <- connectSqlite3 (dbFile root)
-        return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf }
+initialize wantNew root = do
+    hasDb <- doesFileExist (dbFile root)
+    if wantNew
+        then do when hasDb $ error "look like it's already initialized"
+                HFS.run HFS.initialize quarryHashFSConf
+        else when (not hasDb) $ error "look like no DB"
+    conn <- connectSqlite3 (dbFile root)
+    when wantNew $ dbCreateTables conn
+    cache <- emptyCache
+    return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf, cacheTags = cache }
   where quarryHashFSConf = HFS.makeConfSHA512 [2] HFS.OutputHex root
 
-importFile :: [Tag] -> FilePath -> QuarryM QuarryDigest
-importFile tags rfile = do
+importFile :: DataCategory -> [Tag] -> FilePath -> QuarryM QuarryDigest
+importFile dataCat tags rfile = do
     current <- liftIO getCurrentDirectory
     let file = if isRelative rfile then current </> rfile else rfile
     (digest,info) <- runHFS $ do
@@ -61,7 +67,7 @@ importFile tags rfile = do
                         Nothing -> error ("import of file " ++ file ++ " failed")
                         Just z  -> return (digest, z)
     ty <- liftIO $ autoFileType file
-    k  <- dbAddFile digest file info ty
+    k  <- dbAddFile digest dataCat file info ty
     when (not $ null tags) $ do
         mapM_ (dbCreateTag >=> dbAddTag k) tags
     dbCommit
@@ -87,8 +93,16 @@ updateDigest digest addTags delTags = do
             mapM_ (dbFindTag >=> maybe (return ()) (dbRemoveTag fk)) delTags
             dbCommit
 
-resolveDigest :: QuarryDigest -> QuarryM (Maybe FileKey)
+resolveDigest :: QuarryDigest -> QuarryM (Maybe KeyData)
 resolveDigest digest = dbResolveDigest digest
+
+resolveTag :: Either TagName Tag -> QuarryM (Maybe Tag)
+resolveTag (Left tname) = do
+    r <- dbFindTagsMatching (Just tname) Nothing
+    case r of
+        [(cat,tname2)] -> dbResolveKeyCategory cat >>= \c -> return $ Just $ Tag { tagCat = c, tagName = tname2 }
+        _              -> return Nothing
+resolveTag (Right tag) = return $ Just tag
 
 findDigestWithTags :: [Tag] -> QuarryM [QuarryDigest]
 findDigestWithTags tags = dbFindWithTags tags
@@ -96,10 +110,13 @@ findDigestWithTags tags = dbFindWithTags tags
 -- | find tags with specific queries
 --
 -- at the moment only 'starting by' query supported
-findTags :: String -> QuarryM [Tag]
-findTags s =
+findTags :: Maybe String -> Maybe Category -> QuarryM [(KeyCategory, TagName)]
+findTags s mcat =
     -- need ending by, contains, etc..
-    dbFindTagsStartingBy s
+    dbFindTagsMatching s mcat
+
+getCategoryTable :: QuarryM [(KeyCategory,Category)] 
+getCategoryTable = dbGetCategories
 
 --digestOfKeys :: [DataKey] -> QuarryM [QuarryDigest]
 --digestOfKeys fks = mapM dbResolveKey fks

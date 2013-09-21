@@ -6,9 +6,10 @@ import System.Console.GetOpt
 
 import Control.Monad (forM_, when)
 import Control.Monad.Trans
-import Control.Applicative ()
+import Control.Applicative ((<$>))
 import Tools.Quarry
 import Data.List
+import Data.Maybe
 
 data SubCommand = Init | Import | Set | Get | Find | Tags
     deriving (Show,Eq)
@@ -29,6 +30,15 @@ usage Tags   = error "usage: quarry tags <repository-path> <tag prefix> ..."
 reportOptError errOpts
     | null errOpts = return ()
     | otherwise    = mapM_ (putStrLn . ("parseError: " ++)) errOpts >> exitFailure
+
+fromTagArg :: String -> Either TagName Tag
+fromTagArg s = case break (== ':') s of
+    (_,"")      -> Left s
+    (_  ,[':']) -> error "empty tag, expecting 'category:tag', got 'category:'"
+    (cat,':':t) -> Right $ Tag { tagName = t, tagCat = cat }
+    _           -> error "impossible with break"
+
+tag s = maybe (error $ "cannot resolve " ++ s) id <$> resolveTag (fromTagArg s)
 
 cmdInit args = do
     let (optArgs, nonOpts, errOpts) = getOpt Permute options args
@@ -52,9 +62,10 @@ cmdImport args = do
   where options =
             [ Option ['h'] ["help"] (NoArg ImportHelp) "show help"
             ]
+        hardcodedDataCat = CategoryPersonal
         doImport path file = do
             conf   <- initialize False path
-            digest <- runQuarry conf $ importFile [] file
+            digest <- runQuarry conf $ importFile hardcodedDataCat [] file
             putStrLn (show digest)
 
 cmdSet args =
@@ -62,17 +73,29 @@ cmdSet args =
         path:digest:tagPatches -> doSet path (maybe (error "not a valid digest") id $ readDigest digest) tagPatches
         _                      -> usage Import
   where doSet path digest tagPatches = do
-            putStrLn (show tagPatches)
-            let (addTags, delTags) = foldl readPatch ([], []) tagPatches
-            putStrLn ("deleting tags: " ++ show delTags)
-            putStrLn ("adding tags: " ++ show addTags)
+            let (addTagArgs, delTagArgs) = foldl readPatch ([], []) tagPatches
             conf <- initialize False path
-            runQuarry conf $ updateDigest digest addTags delTags
+            runQuarry conf $ do
+--tag s = maybe (error $ "cannot resolve " ++ s) id <$> resolveTag (fromTagArg s)
+                addTags <- catMaybes <$> mapM resolveAddTag addTagArgs
+                delTags <- catMaybes <$> mapM (resolveTag . fromTagArg) delTagArgs
+                liftIO $ putStrLn ("deleting tags: " ++ show delTags)
+                liftIO $ putStrLn ("adding tags: " ++ show addTags)
+                updateDigest digest addTags delTags
+        resolveAddTag s = do
+            let t = fromTagArg s
+            r <- resolveTag t
+            case r of
+                Just _  -> return r
+                Nothing -> case t of
+                              Left _ -> return $ Just $ Tag { tagName = s, tagCat = "personal" } 
+                              _      -> return r
 
-        readPatch (a,d) s
-            | "+" `isPrefixOf` s = (drop 1 s : a, d)
-            | "-" `isPrefixOf` s = (a, drop 1 s : d)
-            | otherwise          = (a, d)
+        readPatch (a,d) s =
+            case s of
+                '+':toAdd -> (toAdd:a, d)
+                '-':toRem -> (a, toRem:d)
+                _         -> (a,d)
 
 cmdGet _ =
     undefined
@@ -87,9 +110,10 @@ cmdFind args = do
   where options =
             [ Option ['h'] ["help"] (NoArg FindHelp) "show help"
             ]
-        doFind path tags = do
-            conf   <- initialize False path
+        doFind path tagArgs = do
+            conf <- initialize False path
             runQuarry conf $ do
+                tags    <- mapM tag tagArgs
                 digests <- findDigestWithTags tags
                 liftIO $ mapM_ (putStrLn . show) digests
 
@@ -100,8 +124,8 @@ cmdTags args = case args of
             conf <- initialize False path
             runQuarry conf $
                 forM_ l $ \s -> do
-                    tags <- findTags s
-                    mapM_ (liftIO . putStrLn) tags
+                    tags <- findTags (Just s) Nothing
+                    mapM_ (liftIO . putStrLn . show) tags
 
 commands =
     [ ("init",
