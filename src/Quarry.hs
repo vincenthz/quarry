@@ -19,13 +19,15 @@ data ImportOpt = ImportHelp
     deriving (Show,Eq)
 data FindOpt = FindHelp
     deriving (Show,Eq)
+data TagOpt = TagHelp | TagCategory String
+    deriving (Show,Eq)
 
 usage Init   = error "usage: quarry init <repository-path>"
 usage Import = error "usage: quarry import <repository-path> <file>"
 usage Set    = error "usage: quarry set <repository-path> <digest> [+/-tag]"
 usage Get    = error "usage: quarry get <repository-path> <digest>"
 usage Find   = error "usage: quarry find <repository-path> <query>"
-usage Tags   = error "usage: quarry tags <repository-path> <tag prefix> ..."
+usage Tags   = error "usage: quarry tags [--category <category>] <repository-path> <tag prefix> ..."
 
 reportOptError errOpts
     | null errOpts = return ()
@@ -117,14 +119,25 @@ cmdFind args = do
                 digests <- findDigestWithTags tags
                 liftIO $ mapM_ (putStrLn . show) digests
 
-cmdTags args = case args of
-                []     -> usage Tags
-                path:l -> doTags path l
-  where doTags path l = do
+cmdTags args = do
+    let (optArgs, nonOpts, errOpts) = getOpt Permute options args
+    when (TagHelp `elem` optArgs) $ do usage Tags >> exitSuccess
+    reportOptError errOpts
+    case nonOpts of
+        []     -> usage Tags
+        path:l -> doTags optArgs path l
+  where options =
+            [ Option ['h'] ["help"] (NoArg TagHelp) "show help"
+            , Option ['c'] ["category"] (ReqArg TagCategory "category") "restrict tag search to a specific category"
+            ]
+        doTags optArgs path l = do
+            let cat = foldl (\acc f -> case f of
+                                TagCategory c -> Just c
+                                _             -> acc) Nothing optArgs
             conf <- initialize False path
             runQuarry conf $
                 forM_ l $ \s -> do
-                    tags <- findTags (Just s) Nothing
+                    tags <- findTags (Just s) cat
                     mapM_ (liftIO . putStrLn . show) tags
 
 commands =

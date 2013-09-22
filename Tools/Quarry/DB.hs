@@ -114,12 +114,16 @@ dbFindCategory cat = withDB $ \conn -> do
 --
 -- fix SQL escape
 dbFindTag :: Tag -> QuarryM (Maybe KeyTag)
-dbFindTag tag = withDB $ \conn -> do
-    r <- liftIO $ quickQuery conn ("SELECT id FROM tag WHERE name='" ++ tagName tag ++ "' AND category='" ++ tagCat tag ++ "'") []
-    case r of
-        []      -> return Nothing
-        [[uid]] -> return $ Just $ KeyTag $ fromSql uid
-        _       -> error ("dbFindTag: " ++ show tag ++ " unexpected sql output format " ++ show r)
+dbFindTag tag = do
+    mcat <- dbFindCategory (tagCat tag)
+    case mcat of
+        Nothing  -> return Nothing
+        Just cat -> withDB $ \conn -> do
+            r <- liftIO $ quickQuery conn ("SELECT id FROM tag WHERE name='" ++ tagName tag ++ "' AND category=" ++ show (getPrimaryKey cat)) []
+            case r of
+                []      -> return Nothing
+                [[uid]] -> return $ Just $ KeyTag $ fromSql uid
+                _       -> error ("dbFindTag: " ++ show tag ++ " unexpected sql output format " ++ show r)
 
 -- | Find all tags starting by a specific string
 --
@@ -146,7 +150,7 @@ dbAddTag key tag = withDB $ \conn -> liftIO $ prepare conn query >>= \stmt ->
 -- | Remove a Tag from some data
 dbRemoveTag :: KeyData -> KeyTag -> QuarryM ()
 dbRemoveTag key tag = withDB $ \conn -> run_ conn query []
-  where query = "DELETE FROM tagmap WHERE data_id=" ++ show key ++ " AND tag_id=" ++ show tag
+  where query = "DELETE FROM tagmap WHERE data_id=" ++ show (getPrimaryKey key) ++ " AND tag_id=" ++ show (getPrimaryKey tag)
 
 -- | find digests that are part of every tags specified (intersection)
 dbFindWithTags :: [Tag] -> QuarryM [QuarryDigest]

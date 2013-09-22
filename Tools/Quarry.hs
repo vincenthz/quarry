@@ -99,7 +99,6 @@ resolveDigest digest = dbResolveDigest digest
 resolveTag :: Either TagName Tag -> QuarryM (Maybe Tag)
 resolveTag (Left tname) = do
     r <- dbFindTagsMatching (Just tname) Nothing
-    liftIO $ putStrLn ("here: " ++ show r)
     case r of
         [(cat,tname2)] -> dbResolveKeyCategory cat >>= \c -> return $ Just $ Tag { tagCat = c, tagName = tname2 }
         _              -> return Nothing
