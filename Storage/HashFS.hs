@@ -10,6 +10,7 @@ module Storage.HashFS
     , inputDigest
     , computeHash
     , onDigestFile
+    , ImportType(..)
     , importFile
     , importFileAt
     , deleteFile
@@ -65,6 +66,15 @@ computeHash file =
     ask >>= \conf ->
     hashFinalize . hashUpdates (hashfsHash conf) . L.toChunks <$> liftIO (L.readFile file)
 
+-- | make sure the hierarchy required to put the file is created
+createHier :: HashAlgorithm h => Digest h -> HashFS h ()
+createHier hsh = do
+    conf <- ask
+    let spath = getDigestSplitPath conf hsh
+    -- FIXME do it recursively, as it depends on the configured depth
+    destPath <- getPath hsh
+    when (length spath > 1) $ liftIO $ createDirectory (dropFileName $ dropTrailingPathSeparator destPath)
+
 -- | Copy a file to the necessary digest
 copyFileToHash :: HashAlgorithm h
                => ((Context h -> ByteString -> IO (Context h)) -> Context h -> IO (Context h))
@@ -78,10 +88,8 @@ copyFileToHash blocksAcc = do
     if existsAlready
         then liftIO (removeFile tmpFile) >> return hsh
         else do
-            let spath = getDigestSplitPath conf hsh
-            -- FIXME do it recursively, as it depends on the configured depth
+            createHier hsh
             destPath <- getPath hsh
-            when (length spath > 1) $ liftIO $ createDirectory (dropFileName $ dropTrailingPathSeparator destPath)
             liftIO $ rename tmpFile destPath
             return hsh
   where copyAndHash outHandle hashCtx block =
@@ -98,11 +106,26 @@ initialize = do
     return ()
   where metaDirs = not . flip elem [".", ".."]
 
+data ImportType = ImportCopy | ImportSymlink | ImportHardlink
+    deriving (Show,Eq)
+
 -- | import a file into a Hash Filesystem, and return the new digest
-importFile :: HashAlgorithm h => FilePath -> HashFS h (Digest h)
-importFile file = do
-    c <- liftIO $ L.readFile file
-    copyFileToHash (\f ctx -> foldM f ctx $ L.toChunks c)
+importFile :: HashAlgorithm h => ImportType -> FilePath -> HashFS h (Digest h)
+importFile itype file = do
+    case itype of
+        ImportCopy     -> do
+            c <- liftIO $ L.readFile file
+            copyFileToHash (\f ctx -> foldM f ctx $ L.toChunks c)
+        ImportSymlink  -> doImportLink True
+        ImportHardlink -> doImportLink False
+  where doImportLink isSymlink = do
+            digest   <- computeHash file
+            destPath <- getPath digest
+            createHier digest
+            liftIO $ if isSymlink
+                then createSymbolicLink file destPath
+                else createLink file destPath
+            return digest
 
 -- | import a file to a specified Digest value. use with care.
 importFileAt :: HashAlgorithm h => FilePath -> Digest h -> HashFS h ()

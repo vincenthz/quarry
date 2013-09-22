@@ -4,6 +4,7 @@ module Tools.Quarry
     , KeyTag
     , TagName
     , Tag(..)
+    , ImportType(..)
     , DataCategory(..)
     , QuarryConfig
     , runQuarry
@@ -17,6 +18,7 @@ module Tools.Quarry
     , findTags
     ) where
 
+import Storage.HashFS (ImportType(..))
 import qualified Storage.HashFS as HFS
 import Control.Applicative
 import Control.Monad
@@ -56,12 +58,12 @@ initialize wantNew root = do
     return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf, cacheTags = cache }
   where quarryHashFSConf = HFS.makeConfSHA512 [2] HFS.OutputHex root
 
-importFile :: DataCategory -> [Tag] -> FilePath -> QuarryM QuarryDigest
-importFile dataCat tags rfile = do
+importFile :: ImportType -> DataCategory -> [Tag] -> FilePath -> QuarryM QuarryDigest
+importFile itype dataCat tags rfile = do
     current <- liftIO getCurrentDirectory
     let file = if isRelative rfile then current </> rfile else rfile
     (digest,info) <- runHFS $ do
-                    digest <- HFS.importFile file
+                    digest <- HFS.importFile itype file
                     info   <- HFS.readInfo digest
                     case info of
                         Nothing -> error ("import of file " ++ file ++ " failed")

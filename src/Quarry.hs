@@ -15,7 +15,7 @@ data SubCommand = Init | Import | Set | Get | Find | Tags
     deriving (Show,Eq)
 data InitOpt = InitHelp
     deriving (Show,Eq)
-data ImportOpt = ImportHelp
+data ImportOpt = ImportHelp | ImportTy ImportType
     deriving (Show,Eq)
 data FindOpt = FindHelp
     deriving (Show,Eq)
@@ -59,15 +59,20 @@ cmdImport args = do
     when (ImportHelp `elem` optArgs) $ do usage Import >> exitSuccess
     reportOptError errOpts
     case nonOpts of
-        [path,file] -> doImport path file
+        [path,file] -> doImport optArgs path file
         _           -> usage Import
   where options =
             [ Option ['h'] ["help"] (NoArg ImportHelp) "show help"
+            , Option ['s'] ["symlink"] (NoArg (ImportTy ImportSymlink)) "use a symlink to import into the hashfs"
+            , Option [] ["hardlink"] (NoArg (ImportTy ImportHardlink)) "use a hardlink to import into the hashfs"
             ]
         hardcodedDataCat = CategoryPersonal
-        doImport path file = do
+        doImport optArgs path file = do
+            let ity = foldl (\acc f -> case f of
+                                    ImportTy ty -> ty
+                                    _           -> acc) ImportCopy optArgs
             conf   <- initialize False path
-            digest <- runQuarry conf $ importFile hardcodedDataCat [] file
+            digest <- runQuarry conf $ importFile ity hardcodedDataCat [] file
             putStrLn (show digest)
 
 cmdSet args =
