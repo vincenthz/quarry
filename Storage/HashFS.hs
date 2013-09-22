@@ -35,8 +35,7 @@ import Storage.HashFS.Utils
 import Crypto.Hash
 import System.IO hiding (readFile)
 import Prelude hiding (readFile)
-import Data.Time.Clock (UTCTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
+import Data.Time.Clock.POSIX (POSIXTime)
 
 import System.Directory (createDirectory, removeFile, doesDirectoryExist, doesFileExist, getDirectoryContents)
 import System.FilePath ((</>), dropTrailingPathSeparator, dropFileName)
@@ -142,10 +141,9 @@ readFile :: HashAlgorithm h => Digest h => HashFS h (Maybe L.ByteString)
 readFile digest = onDigestFile digest (liftIO . catchIO . L.readFile)
 
 -- | get information about a specific Digest, namely size and mtime
-readInfo :: HashAlgorithm h => Digest h => HashFS h (Maybe (Word64, UTCTime))
+readInfo :: HashAlgorithm h => Digest h => HashFS h (Maybe (Word64, POSIXTime))
 readInfo digest = onDigestFile digest (\path -> liftIO $ catchIO (toInfo <$> getFileStatus path))
-  where toInfo fstat = (fromIntegral $ fileSize fstat, posixSecondsToUTCTime $ realToFrac $ modificationTime fstat)
-
+  where toInfo fstat = (fromIntegral $ fileSize fstat, realToFrac $ modificationTime fstat)
 
 -- | Take a list of prefixes and returns chunks in this prefix path directory
 iterateFiles :: HashAlgorithm h => (Digest h -> IO ()) -> HashFS h ()

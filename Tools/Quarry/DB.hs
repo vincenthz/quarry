@@ -37,7 +37,7 @@ import Control.Applicative
 import Control.Monad (void)
 import Control.Monad.Reader (ask)
 import Control.Monad.Trans
-import Data.Time.Clock
+import Data.Time.Clock.POSIX
 import Data.List (intercalate)
 import Data.Word
 import Data.Maybe
@@ -69,7 +69,7 @@ dbCreateTables :: QuarryDB -> IO ()
 dbCreateTables conn = do
     mapM_ (flip (run conn) [])
         [ "CREATE TABLE version (ver INTEGER)"
-        , "CREATE TABLE data (id INTEGER PRIMARY KEY, hash VARCHAR(80) NOT NULL, category INTEGER NOT NULL, description VARCHAR(1024), mtime INTEGER, dirname VARCHAR(4096), filename VARCHAR(1024), filetype INTEGER)"
+        , "CREATE TABLE data (id INTEGER PRIMARY KEY, hash VARCHAR(80) NOT NULL, category INTEGER NOT NULL, description VARCHAR(1024), size WORD64, mtime WORD64, dirname VARCHAR(4096), filename VARCHAR(1024), filetype INTEGER)"
         , "CREATE TABLE tag (id INTEGER PRIMARY KEY, name VARCHAR(128), category INTEGER NOT NULL)"
         , "CREATE TABLE category (id INTEGER PRIMARY KEY, name VARCHAR(256), abstract INTEGER NOT NULL)"
         , "CREATE TABLE tagmap (data_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, UNIQUE(data_id, tag_id) ON CONFLICT REPLACE)"
@@ -198,8 +198,8 @@ dbResolveKeyCategory fk = do
         _       -> error ("category key " ++ show fk ++ " cannot be resolved")
 
 -- | add Digest to known content
-dbAddFile :: QuarryDigest -> DataCategory -> FilePath -> (Word64, UTCTime) -> QuarryFileType -> QuarryM KeyData
-dbAddFile digest dataCat path (_,_) ft
+dbAddFile :: QuarryDigest -> DataCategory -> FilePath -> (Word64, POSIXTime) -> QuarryFileType -> QuarryM KeyData
+dbAddFile digest dataCat path (sz,pt) ft
     | isRelative path = error "cannot accept relative path in dbAddFile"
     | otherwise = withDB $ \conn -> do
         let (dirName, fileName) = splitFileName path
@@ -208,11 +208,12 @@ dbAddFile digest dataCat path (_,_) ft
             KeyData <$> insertAndGetID conn stmt
                 [ toSql (digestToDb digest)
                 , toSql (intDataCategory dataCat)
-                , toSql (0::Int) -- fixme
+                , toSql sz
+                , toSql pt
                 , toSql dirName
                 , toSql fileName
                 , toSql (fromEnum ft :: Int)]
-  where query = "INSERT INTO data (hash, category, mtime, dirname, filename, filetype) VALUES (?,?,?,?,?,?)"
+  where query = "INSERT INTO data (hash, category, size, mtime, dirname, filename, filetype) VALUES (?,?,?,?,?,?,?)"
 
 dbCommit :: QuarryM ()
 dbCommit = withDB $ \conn -> liftIO (commit conn)
