@@ -70,6 +70,7 @@ fetchAll f stmt = loop
 getTableMap :: IConnection con => con -> Table -> (Integer -> a) -> ([SqlValue] -> b) -> IO [(a,b)]
 getTableMap conn table keyConstr dataConstr = do
     stmt <- prepare conn query
+    _ <- execute stmt []
     fetchAll toTable stmt
   where
     query = "SELECT * FROM " ++ tableName table
