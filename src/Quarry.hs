@@ -11,7 +11,7 @@ import Tools.Quarry
 import Data.List
 import Data.Maybe
 
-data SubCommand = Init | Import | Set | Get | Find | Tags | Info
+data SubCommand = Init | Import | Set | Get | Find | Tags | Cats | Info
     deriving (Show,Eq)
 data InitOpt = InitHelp
     deriving (Show,Eq)
@@ -21,6 +21,8 @@ data FindOpt = FindHelp
     deriving (Show,Eq)
 data TagOpt = TagHelp | TagCategory String
     deriving (Show,Eq)
+data CatsOpt = CatsHelp
+    deriving (Show,Eq)
 
 usage Init   = error "usage: quarry init <repository-path>"
 usage Import = error "usage: quarry import <repository-path> <file>"
@@ -28,6 +30,7 @@ usage Set    = error "usage: quarry set <repository-path> <digest> [+/-tag]"
 usage Get    = error "usage: quarry get <repository-path> <digest>"
 usage Find   = error "usage: quarry find <repository-path> <query>"
 usage Tags   = error "usage: quarry tags [--category <category>] <repository-path> <tag prefix> ..."
+usage Cats   = error "usage: quarry cats <repository-path> <cat prefix> ..."
 usage Info   = error "usage: quarry info <repository-path>"
 
 reportOptError errOpts
@@ -146,6 +149,22 @@ cmdTags args = do
                     tags <- findTags (Just s) cat
                     mapM_ (liftIO . putStrLn . show) tags
 
+cmdCats args = do
+    let (optArgs, nonOpts, errOpts) = getOpt Permute options args
+    when (CatsHelp `elem` optArgs) $ do usage Cats >> exitSuccess
+    reportOptError errOpts
+    case nonOpts of
+        []     -> usage Cats
+        path:_ -> doCats optArgs path
+  where options =
+            [ Option ['h'] ["help"] (NoArg CatsHelp) "show help"
+            ]
+        doCats _ path = do
+            conf <- initialize False path
+            runQuarry conf $ do
+                cats <- getCategoryTable
+                mapM_ (liftIO . putStrLn . snd) cats
+
 cmdInfo args = do
     case args of
         path:[] -> doInfo path
@@ -176,6 +195,11 @@ commands =
     , ("tags",
         ( cmdTags
         , "list tags"
+        )
+      )
+    , ("cats",
+        ( cmdCats
+        , "list categories"
         )
       )
     , ("get",
