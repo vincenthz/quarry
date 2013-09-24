@@ -13,10 +13,13 @@ module Tools.Quarry.DB
     , dbFile
     -- * init
     , dbCreateTables
-    -- * tag related query
-    , dbGetCategories
+    -- * tag and category manipulation
     , dbCreateTag
     , dbFindTag
+    , dbCreateCategory
+    , dbFindCategory
+    , dbGetCategories
+    -- * tag related query
     , dbFindTagsMatching
     , dbResolveDigest
     , dbResolveKeyCategory
@@ -33,9 +36,10 @@ import Tools.Quarry.Monad
 import Tools.Quarry.DBHelper
 import Tools.Quarry.Config
 import Tools.Quarry.DB.Types
+import Tools.Quarry.DB.Utils
+import Tools.Quarry.DB.Meta
 import Control.Applicative
 import Control.Monad (void)
-import Control.Monad.Reader (ask)
 import Control.Monad.Trans
 import Data.Time.Clock.POSIX
 import Data.List (intercalate)
@@ -43,7 +47,6 @@ import Data.Word
 import Data.Maybe
 import Database.HDBC
 import System.FilePath
-import qualified Storage.HashFS as HFS
 import qualified Data.ByteString.Char8 as BC
 
 data DataCategory =
@@ -62,14 +65,11 @@ intDataCategory CategoryBook     = 4
 dbFile :: FilePath -> FilePath
 dbFile root = root </> "quarry.db"
 
-run_ :: (Functor m, MonadIO m) => QuarryDB -> String -> [SqlValue] -> m ()
-run_ conn query args = void $ liftIO $ run conn query args
-
 dbCreateTables :: QuarryDB -> IO ()
 dbCreateTables conn = do
     mapM_ (flip (run conn) [])
         [ "CREATE TABLE version (ver INTEGER)"
-        , "CREATE TABLE data (id INTEGER PRIMARY KEY, hash VARCHAR(80) NOT NULL, category INTEGER NOT NULL, description VARCHAR(1024), size WORD64, mtime WORD64, dirname VARCHAR(4096), filename VARCHAR(1024), filetype INTEGER)"
+        , "CREATE TABLE data (id INTEGER PRIMARY KEY, hash VARCHAR(80) NOT NULL, category INTEGER NOT NULL, description VARCHAR(1024), size WORD64, mtime WORD64, date WORD64, itime WORD64, dirname VARCHAR(4096), filename VARCHAR(1024), filetype INTEGER)"
         , "CREATE TABLE tag (id INTEGER PRIMARY KEY, name VARCHAR(128), category INTEGER NOT NULL)"
         , "CREATE TABLE category (id INTEGER PRIMARY KEY, name VARCHAR(256), abstract INTEGER NOT NULL)"
         , "CREATE TABLE tagmap (data_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, UNIQUE(data_id, tag_id) ON CONFLICT REPLACE)"
@@ -81,56 +81,11 @@ dbCreateTables conn = do
         ]
     commit conn
 
--- | Create a specific tag
---
--- will check if tag already exists
-dbCreateTag :: Tag -> QuarryM KeyTag
-dbCreateTag tag = do
-    mt <- dbFindTag tag
-    case mt of
-        Nothing -> do cat <- dbFindCategory (tagCat tag)
-                      case cat of
-                            Nothing -> undefined
-                            Just c  -> withDB $ \conn -> liftIO $ do
-                                        stmt <- prepare conn queryInsertTag
-                                        KeyTag <$> insertAndGetID conn stmt [toSql (tagName tag), toSql $ getPrimaryKey c]
-        Just t  -> return t
-  where queryInsertTag = "INSERT INTO tag (name, category) VALUES (?, ?)"
-
-dbGetCategories :: QuarryM [(KeyCategory, Category)]
-dbGetCategories = withDB $ \conn -> liftIO $ getTableMap conn tableCategory KeyCategory toVal
-  where toVal [SqlString name] = name
-        toVal r                = error $ "unexpected value in category table: " ++ show r
-
-dbFindCategory :: Category -> QuarryM (Maybe KeyCategory)
-dbFindCategory cat = withDB $ \conn -> do
-    r <- liftIO $ quickQuery conn ("SELECT id FROM category WHERE name='" ++ cat ++ "'") []
-    case r of
-        []      -> return Nothing
-        [[uid]] -> return $ Just $ KeyCategory $ fromSql uid
-        _       -> error ("dbFindCategory: " ++ show cat ++ " unexpected sql output format " ++ show r)
-
--- | Try to find the key associated to a Tag
---
--- fix SQL escape
-dbFindTag :: Tag -> QuarryM (Maybe KeyTag)
-dbFindTag tag = do
-    mcat <- dbFindCategory (tagCat tag)
-    case mcat of
-        Nothing  -> return Nothing
-        Just cat -> withDB $ \conn -> do
-            r <- liftIO $ quickQuery conn ("SELECT id FROM tag WHERE name='" ++ tagName tag ++ "' AND category=" ++ show (getPrimaryKey cat)) []
-            case r of
-                []      -> return Nothing
-                [[uid]] -> return $ Just $ KeyTag $ fromSql uid
-                _       -> error ("dbFindTag: " ++ show tag ++ " unexpected sql output format " ++ show r)
-
 -- | Find all tags starting by a specific string
 --
 -- * fix SQL escape
 --
 -- * doesn't work if both Nothing
---
 dbFindTagsMatching :: Maybe String -> Maybe Category -> QuarryM [(KeyCategory, TagName)]
 dbFindTagsMatching nameConstraint categoryConstraint = do
     mcat <- maybe (return Nothing) (\x -> dbFindCategory x) categoryConstraint
@@ -198,10 +153,17 @@ dbResolveKeyCategory fk = do
         _       -> error ("category key " ++ show fk ++ " cannot be resolved")
 
 -- | add Digest to known content
-dbAddFile :: QuarryDigest -> DataCategory -> FilePath -> (Word64, POSIXTime) -> QuarryFileType -> QuarryM KeyData
-dbAddFile digest dataCat path (sz,pt) ft
+dbAddFile :: QuarryDigest        -- ^ digest
+          -> DataCategory        -- ^ category of file
+          -> FilePath            -- ^ an absolute path
+          -> Maybe POSIXTime     -- ^ a date
+          -> (Word64, POSIXTime) -- ^ (Size and file Mtime)
+          -> QuarryFileType      -- ^ file type
+          -> QuarryM KeyData
+dbAddFile digest dataCat path date (sz,pt) ft
     | isRelative path = error "cannot accept relative path in dbAddFile"
     | otherwise = withDB $ \conn -> do
+        currentTime <- floor <$> liftIO getPOSIXTime
         let (dirName, fileName) = splitFileName path
         stmt <- liftIO $ prepare conn query
         liftIO $ do
@@ -210,21 +172,9 @@ dbAddFile digest dataCat path (sz,pt) ft
                 , toSql (intDataCategory dataCat)
                 , toSql sz
                 , toSql pt
+                , toSql (maybe 0 floor date :: Word64)
+                , toSql (currentTime :: Word64)
                 , toSql dirName
                 , toSql fileName
                 , toSql (fromEnum ft :: Int)]
-  where query = "INSERT INTO data (hash, category, size, mtime, dirname, filename, filetype) VALUES (?,?,?,?,?,?,?)"
-
-dbCommit :: QuarryM ()
-dbCommit = withDB $ \conn -> liftIO (commit conn)
-
--- FIXME probably no need to use the hexadecimal version
-digestToDb :: QuarryDigest -> String
-digestToDb = show
-
-digestFromDb :: String -> QuarryDigest
-digestFromDb = maybe (error "from db not a valid digest") id . HFS.inputDigest HFS.OutputHex
-
--- | execute something on a DB
-withDB :: (QuarryDB -> QuarryM a) -> QuarryM a
-withDB f = ask >>= \conf -> f (connection conf)
+  where query = "INSERT INTO data (hash, category, size, mtime, date, itime, dirname, filename, filetype) VALUES (?,?,?,?,?,?,?)"

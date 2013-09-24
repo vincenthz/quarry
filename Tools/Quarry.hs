@@ -16,6 +16,7 @@ module Tools.Quarry
     , findDigestWithTags
     , readDigest
     , findTags
+    , addCategory
     ) where
 
 import Storage.HashFS (ImportType(..))
@@ -69,7 +70,7 @@ importFile itype dataCat tags rfile = do
                         Nothing -> error ("import of file " ++ file ++ " failed")
                         Just z  -> return (digest, z)
     ty <- liftIO $ autoFileType file
-    k  <- dbAddFile digest dataCat file info ty
+    k  <- dbAddFile digest dataCat file Nothing info ty
     when (not $ null tags) $ do
         mapM_ (dbCreateTag >=> dbAddTag k) tags
     dbCommit
@@ -119,6 +120,11 @@ findTags s mcat =
 
 getCategoryTable :: QuarryM [(KeyCategory,Category)] 
 getCategoryTable = dbGetCategories
+
+addCategory :: Category -> QuarryM ()
+addCategory cat = do
+    _ <- dbCreateCategory cat
+    return ()
 
 --digestOfKeys :: [DataKey] -> QuarryM [QuarryDigest]
 --digestOfKeys fks = mapM dbResolveKey fks

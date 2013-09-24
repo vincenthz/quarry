@@ -20,6 +20,8 @@ Library
                    , Tools.Quarry.Types
                    , Tools.Quarry.Config
                    , Tools.Quarry.DB.Types
+                   , Tools.Quarry.DB.Utils
+                   , Tools.Quarry.DB.Meta
                    , Tools.Quarry.DB
                    , Tools.Quarry.DBHelper
                    , Tools.Quarry.Cache
