@@ -8,6 +8,7 @@ import Control.Monad (void)
 import Control.Monad.Reader (ask)
 import Control.Monad.Trans
 import Database.HDBC
+import Data.List (intercalate)
 import qualified Storage.HashFS as HFS
 
 -- | execute something on a DB
@@ -28,3 +29,16 @@ digestToDb = show
 
 digestFromDb :: String -> QuarryDigest
 digestFromDb = maybe (error "from db not a valid digest") id . HFS.inputDigest HFS.OutputHex
+
+
+sqlSelect :: String -> String -> Maybe String -> String
+sqlSelect sel tableS constraint =
+    "SELECT " ++ sel ++ " FROM " ++ tableS ++ maybe "" (\s -> " WHERE " ++ s) constraint
+
+sqlInsert :: String -> [String] -> [String] -> String
+sqlInsert tableS fields values
+    | not (null fields) && length fields /= length values = error ("sql insert: " ++ tableS ++ " mismatch length of fields and values : " ++ show fields ++ " " ++ show values)
+    | otherwise = "INSERT INTO " ++ tableS ++ fieldS ++ " VALUES (" ++ valuesS ++ ")"
+  where fieldS | null fields = ""
+               | otherwise   = "(" ++ intercalate ", " fields ++ ")"
+        valuesS = intercalate ", " values
