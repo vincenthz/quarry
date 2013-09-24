@@ -17,6 +17,8 @@ module Tools.Quarry
     , readDigest
     , findTags
     , addCategory
+    , QuarryInfo(..)
+    , getInfo
     ) where
 
 import Storage.HashFS (ImportType(..))
@@ -28,6 +30,7 @@ import Crypto.Hash (SHA512)
 
 import System.FilePath
 import System.Directory
+import Data.Word
 
 import Database.HDBC.Sqlite3 (connectSqlite3)
 
@@ -36,6 +39,7 @@ import Tools.Quarry.Cache
 import Tools.Quarry.Config
 import Tools.Quarry.Monad
 import Tools.Quarry.DB
+import Tools.Quarry.DBHelper
 import Data.FileFormat
 
 readDigest :: String -> Maybe QuarryDigest
@@ -125,6 +129,18 @@ addCategory :: Category -> QuarryM ()
 addCategory cat = do
     _ <- dbCreateCategory cat
     return ()
+
+data QuarryInfo = QuarryInfo
+    { infoNFile     :: Word64
+    , infoNTag      :: Word64
+    , infoNCategory :: Word64
+    } deriving (Show,Eq)
+
+getInfo :: QuarryM QuarryInfo
+getInfo = withDB $ \conn -> liftIO $
+    QuarryInfo <$> getCount conn tableData Nothing
+               <*> getCount conn tableTag Nothing
+               <*> getCount conn tableCategory Nothing
 
 --digestOfKeys :: [DataKey] -> QuarryM [QuarryDigest]
 --digestOfKeys fks = mapM dbResolveKey fks

@@ -11,7 +11,7 @@ import Tools.Quarry
 import Data.List
 import Data.Maybe
 
-data SubCommand = Init | Import | Set | Get | Find | Tags
+data SubCommand = Init | Import | Set | Get | Find | Tags | Info
     deriving (Show,Eq)
 data InitOpt = InitHelp
     deriving (Show,Eq)
@@ -28,6 +28,7 @@ usage Set    = error "usage: quarry set <repository-path> <digest> [+/-tag]"
 usage Get    = error "usage: quarry get <repository-path> <digest>"
 usage Find   = error "usage: quarry find <repository-path> <query>"
 usage Tags   = error "usage: quarry tags [--category <category>] <repository-path> <tag prefix> ..."
+usage Info   = error "usage: quarry info <repository-path>"
 
 reportOptError errOpts
     | null errOpts = return ()
@@ -145,6 +146,17 @@ cmdTags args = do
                     tags <- findTags (Just s) cat
                     mapM_ (liftIO . putStrLn . show) tags
 
+cmdInfo args = do
+    case args of
+        path:[] -> doInfo path
+        _       -> usage Import
+  where doInfo path = do
+            conf <- initialize False path
+            info <- runQuarry conf $ getInfo
+            putStrLn ("files      : " ++ show (infoNFile info))
+            putStrLn ("tags       : " ++ show (infoNTag info))
+            putStrLn ("categories : " ++ show (infoNCategory info))
+
 commands =
     [ ("init",
         ( cmdInit
@@ -174,6 +186,11 @@ commands =
     , ("find",
         ( cmdFind
         , "find contents by query"
+        )
+      )
+    , ("info",
+        ( cmdInfo
+        , "get quarry general state information"
         )
       )
     ]

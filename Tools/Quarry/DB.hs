@@ -8,6 +8,9 @@ module Tools.Quarry.DB
     , TagName
     , Tag(..)
     , DataCategory(..)
+    , tableData
+    , tableCategory
+    , tableTag
     -- * helper
     , withDB
     , dbFile

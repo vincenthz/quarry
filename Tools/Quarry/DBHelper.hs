@@ -6,6 +6,7 @@ module Tools.Quarry.DBHelper
 import Control.Monad (liftM)
 import Database.HDBC
 import Tools.Quarry.DB.Types
+import Data.Word
 
 data StringQuery = StartWith String | EndWith String | Contains String | Is String
     deriving (Eq)
@@ -74,3 +75,9 @@ getTableMap conn table keyConstr dataConstr = do
     query = "SELECT * FROM " ++ tableName table
     toTable []    = error "empty row"
     toTable (k:v) = (keyConstr $ fromSql k, dataConstr v)
+
+getCount :: IConnection con => con -> Table -> Maybe String -> IO Word64
+getCount conn table constraint = do
+    [[count]] <- quickQuery conn query []
+    return $ fromSql count
+  where query = "SELECT COUNT(*) FROM " ++ tableName table ++ maybe "" (\s -> " WHERE " ++ s) constraint
