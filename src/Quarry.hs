@@ -8,6 +8,7 @@ import Control.Monad (forM_, when)
 import Control.Monad.Trans
 import Control.Applicative ((<$>))
 import Tools.Quarry
+import Data.Word
 import Data.List
 import Data.Maybe
 
@@ -15,7 +16,7 @@ data SubCommand = Init | Import | Set | Get | Find | Tags | Cats | Info
     deriving (Show,Eq)
 data InitOpt = InitHelp
     deriving (Show,Eq)
-data ImportOpt = ImportHelp | ImportTy ImportType
+data ImportOpt = ImportHelp | ImportTy ImportType | ImportDate String
     deriving (Show,Eq)
 data FindOpt = FindHelp
     deriving (Show,Eq)
@@ -69,14 +70,19 @@ cmdImport args = do
             [ Option ['h'] ["help"] (NoArg ImportHelp) "show help"
             , Option ['s'] ["symlink"] (NoArg (ImportTy ImportSymlink)) "use a symlink to import into the hashfs"
             , Option [] ["hardlink"] (NoArg (ImportTy ImportHardlink)) "use a hardlink to import into the hashfs"
+            , Option ['d'] ["date"] (ReqArg ImportDate "date") "add a date in posix seconds"
             ]
         hardcodedDataCat = CategoryPersonal
         doImport optArgs path file = do
-            let ity = foldl (\acc f -> case f of
-                                    ImportTy ty -> ty
-                                    _           -> acc) ImportCopy optArgs
+            let (date,ity) = foldl (\acc@(d,t) f -> case f of
+                                                        ImportTy ty   -> (d,ty)
+                                                        ImportDate da -> (read da, t)
+                                                        _             -> acc) (0 :: Word64, ImportCopy) optArgs
+            let mDate = case date of
+                            0 -> Nothing
+                            _ -> Just $ fromIntegral date
             conf   <- initialize False path
-            digest <- runQuarry conf $ importFile ity hardcodedDataCat [] file
+            digest <- runQuarry conf $ importFile ity hardcodedDataCat mDate [] file
             putStrLn (show digest)
 
 cmdSet args =
@@ -163,7 +169,7 @@ cmdCats args = do
             conf <- initialize False path
             runQuarry conf $ do
                 cats <- getCategoryTable
-                mapM_ (liftIO . putStrLn . snd) cats
+                mapM_ (\(_,(c,a)) -> liftIO $ putStrLn (c ++ " (abstract=" ++ show a ++ ")")) cats
 
 cmdInfo args = do
     case args of

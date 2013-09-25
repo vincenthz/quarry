@@ -32,6 +32,8 @@ import System.FilePath
 import System.Directory
 import Data.Word
 
+import Data.Time.Clock.POSIX
+
 import Database.HDBC.Sqlite3 (connectSqlite3)
 
 import Tools.Quarry.Types
@@ -63,8 +65,8 @@ initialize wantNew root = do
     return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf, cacheTags = cache }
   where quarryHashFSConf = HFS.makeConfSHA512 [2] HFS.OutputHex root
 
-importFile :: ImportType -> DataCategory -> [Tag] -> FilePath -> QuarryM QuarryDigest
-importFile itype dataCat tags rfile = do
+importFile :: ImportType -> DataCategory -> Maybe POSIXTime -> [Tag] -> FilePath -> QuarryM QuarryDigest
+importFile itype dataCat mDate tags rfile = do
     current <- liftIO getCurrentDirectory
     let file = if isRelative rfile then current </> rfile else rfile
     (digest,info) <- runHFS $ do
@@ -74,7 +76,7 @@ importFile itype dataCat tags rfile = do
                         Nothing -> error ("import of file " ++ file ++ " failed")
                         Just z  -> return (digest, z)
     ty <- liftIO $ autoFileType file
-    k  <- dbAddFile digest dataCat file Nothing info ty
+    k  <- dbAddFile digest dataCat file mDate info ty
     when (not $ null tags) $ do
         mapM_ (dbCreateTag >=> dbAddTag k) tags
     dbCommit
@@ -122,7 +124,7 @@ findTags s mcat =
     -- need ending by, contains, etc..
     dbFindTagsMatching s mcat
 
-getCategoryTable :: QuarryM [(KeyCategory,Category)] 
+getCategoryTable :: QuarryM [(KeyCategory,(Category,Bool))] 
 getCategoryTable = dbGetCategories
 
 addCategory :: Category -> QuarryM ()

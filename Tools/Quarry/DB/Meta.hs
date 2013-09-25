@@ -63,7 +63,7 @@ dbFindCategory cat = withDB $ \conn -> do
         [[uid]] -> return $ Just $ KeyCategory $ fromSql uid
         _       -> error ("dbFindCategory: " ++ show cat ++ " unexpected sql output format " ++ show r)
 
-dbGetCategories :: QuarryM [(KeyCategory, Category)]
+dbGetCategories :: QuarryM [(KeyCategory, (Category, Bool))]
 dbGetCategories = withDB $ \conn -> liftIO $ getTableMap conn tableCategory KeyCategory toVal
-  where toVal [SqlString name] = name
-        toVal r                = error $ "unexpected value in category table: " ++ show r
+  where toVal [name,abstr] = (fromSql name, fromSql abstr)
+        toVal r            = error $ "unexpected value in category table: " ++ show r
