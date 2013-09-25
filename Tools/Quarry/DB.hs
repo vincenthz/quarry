@@ -138,6 +138,7 @@ dbResolveDigest :: QuarryDigest -> QuarryM (Maybe KeyData)
 dbResolveDigest digest = do
     r <- withDB $ \conn -> liftIO $ quickQuery conn ("SELECT id FROM data WHERE hash='" ++ digestToDb digest ++ "'") []
     case r of
+        _:_:_   -> error ("duplicate data instance in database: " ++ show digest)
         [[uid]] -> return $ Just $ KeyData $ fromSql uid
         _       -> return Nothing
 
@@ -180,4 +181,4 @@ dbAddFile digest dataCat path date (sz,pt) ft
                 , toSql dirName
                 , toSql fileName
                 , toSql (fromEnum ft :: Int)]
-  where query = "INSERT INTO data (hash, category, size, mtime, date, itime, dirname, filename, filetype) VALUES (?,?,?,?,?,?,?)"
+  where query = "INSERT INTO data (hash, category, size, mtime, date, itime, dirname, filename, filetype) VALUES (?,?,?,?,?,?,?,?,?)"

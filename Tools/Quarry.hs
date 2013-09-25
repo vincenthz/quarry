@@ -23,6 +23,7 @@ module Tools.Quarry
 
 import Storage.HashFS (ImportType(..))
 import qualified Storage.HashFS as HFS
+import System.Posix.Files
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Reader
@@ -65,22 +66,28 @@ initialize wantNew root = do
     return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf, cacheTags = cache }
   where quarryHashFSConf = HFS.makeConfSHA512 [2] HFS.OutputHex root
 
-importFile :: ImportType -> DataCategory -> Maybe POSIXTime -> [Tag] -> FilePath -> QuarryM QuarryDigest
+importFile :: ImportType -> DataCategory -> Maybe POSIXTime -> [Tag] -> FilePath -> QuarryM (QuarryDigest,Bool)
 importFile itype dataCat mDate tags rfile = do
     current <- liftIO getCurrentDirectory
     let file = if isRelative rfile then current </> rfile else rfile
-    (digest,info) <- runHFS $ do
+    fstat <- liftIO $ getFileStatus file
+    digest <- runHFS $ do
                     digest <- HFS.importFile itype file
                     info   <- HFS.readInfo digest
                     case info of
                         Nothing -> error ("import of file " ++ file ++ " failed")
-                        Just z  -> return (digest, z)
-    ty <- liftIO $ autoFileType file
-    k  <- dbAddFile digest dataCat file mDate info ty
-    when (not $ null tags) $ do
-        mapM_ (dbCreateTag >=> dbAddTag k) tags
-    dbCommit
-    return digest
+                        Just _  -> return digest
+    key <- dbResolveDigest digest
+    case key of
+        Nothing -> do
+            ty <- liftIO $ autoFileType file
+            let info = (fromIntegral $ fileSize fstat, realToFrac $ modificationTime fstat)
+            k  <- dbAddFile digest dataCat file mDate info ty
+            when (not $ null tags) $ do
+                mapM_ (dbCreateTag >=> dbAddTag k) tags
+            dbCommit
+            return (digest, True)
+        Just _ -> return (digest, False)
   where autoFileType path = toQuarryFileType <$> getFileformat path
         toQuarryFileType ft = case ft of
                 FT_JPEG   -> QuarryTypeImage

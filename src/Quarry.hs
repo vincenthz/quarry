@@ -11,12 +11,13 @@ import Tools.Quarry
 import Data.Word
 import Data.List
 import Data.Maybe
+import System.IO
 
 data SubCommand = Init | Import | Set | Get | Find | Tags | Cats | Info
     deriving (Show,Eq)
 data InitOpt = InitHelp
     deriving (Show,Eq)
-data ImportOpt = ImportHelp | ImportTy ImportType | ImportDate String
+data ImportOpt = ImportHelp | ImportTy ImportType | ImportDate String | ImportTag String
     deriving (Show,Eq)
 data FindOpt = FindHelp
     deriving (Show,Eq)
@@ -31,7 +32,7 @@ usage Set    = error "usage: quarry set <repository-path> <digest> [+/-tag]"
 usage Get    = error "usage: quarry get <repository-path> <digest>"
 usage Find   = error "usage: quarry find <repository-path> <query>"
 usage Tags   = error "usage: quarry tags [--category <category>] <repository-path> <tag prefix> ..."
-usage Cats   = error "usage: quarry cats <repository-path> <cat prefix> ..."
+usage Cats   = error "usage: quarry cats <add|list> <repository-path> <cat prefix> ..."
 usage Info   = error "usage: quarry info <repository-path>"
 
 reportOptError errOpts
@@ -46,6 +47,17 @@ fromTagArg s = case break (== ':') s of
     _           -> error "impossible with break"
 
 tag s = maybe (error $ "cannot resolve " ++ s) id <$> resolveTag (fromTagArg s)
+
+-- create a tag object, automatically filling category to personal if cannot be found.
+resolveAddTag s = do
+    let t = fromTagArg s
+    r <- resolveTag t
+    case r of
+        Just _  -> return r
+        Nothing -> case t of
+                      Left _ -> return $ Just $ Tag { tagName = s, tagCat = "personal" } 
+                      _      -> return r
+
 
 cmdInit args = do
     let (optArgs, nonOpts, errOpts) = getOpt Permute options args
@@ -71,19 +83,25 @@ cmdImport args = do
             , Option ['s'] ["symlink"] (NoArg (ImportTy ImportSymlink)) "use a symlink to import into the hashfs"
             , Option [] ["hardlink"] (NoArg (ImportTy ImportHardlink)) "use a hardlink to import into the hashfs"
             , Option ['d'] ["date"] (ReqArg ImportDate "date") "add a date in posix seconds"
+            , Option ['t'] ["tag"] (ReqArg ImportTag "tag") "add a tag"
             ]
         hardcodedDataCat = CategoryPersonal
         doImport optArgs path file = do
-            let (date,ity) = foldl (\acc@(d,t) f -> case f of
-                                                        ImportTy ty   -> (d,ty)
-                                                        ImportDate da -> (read da, t)
-                                                        _             -> acc) (0 :: Word64, ImportCopy) optArgs
+            let (date,tags,ity) = foldl (\acc@(d,accTags,t) f -> case f of
+                                                        ImportTy ty   -> (d,accTags,ty)
+                                                        ImportDate da -> (read da,accTags,t)
+                                                        ImportTag ta  -> (d,ta:accTags,t)
+                                                        _             -> acc) (0 :: Word64, [], ImportCopy) optArgs
             let mDate = case date of
                             0 -> Nothing
                             _ -> Just $ fromIntegral date
             conf   <- initialize False path
-            digest <- runQuarry conf $ importFile ity hardcodedDataCat mDate [] file
-            putStrLn (show digest)
+            (digest,isNew) <- runQuarry conf $ do
+                addTags <- catMaybes <$> mapM resolveAddTag tags
+                importFile ity hardcodedDataCat mDate addTags file
+            if isNew
+                then putStrLn (show digest)
+                else hPutStrLn stderr (show digest ++ " already existing ")
 
 cmdSet args =
     case args of
@@ -99,15 +117,6 @@ cmdSet args =
                 liftIO $ putStrLn ("deleting tags: " ++ show delTags)
                 liftIO $ putStrLn ("adding tags: " ++ show addTags)
                 updateDigest digest addTags delTags
-        resolveAddTag s = do
-            let t = fromTagArg s
-            r <- resolveTag t
-            case r of
-                Just _  -> return r
-                Nothing -> case t of
-                              Left _ -> return $ Just $ Tag { tagName = s, tagCat = "personal" } 
-                              _      -> return r
-
         readPatch (a,d) s =
             case s of
                 '+':toAdd -> (toAdd:a, d)
@@ -160,11 +169,16 @@ cmdCats args = do
     when (CatsHelp `elem` optArgs) $ do usage Cats >> exitSuccess
     reportOptError errOpts
     case nonOpts of
-        []     -> usage Cats
-        path:_ -> doCats optArgs path
+        []         -> usage Cats
+        "add":path:name:[] -> doCatAdd optArgs path name
+        "list":path:_      -> doCats optArgs path
+        cmd:_              -> error ("error unknown sub command " ++ cmd ++ " in cats: expected list or add")
   where options =
             [ Option ['h'] ["help"] (NoArg CatsHelp) "show help"
             ]
+        doCatAdd _ path name = do
+            conf <- initialize False path
+            runQuarry conf $ addCategory name
         doCats _ path = do
             conf <- initialize False path
             runQuarry conf $ do
