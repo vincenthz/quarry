@@ -66,8 +66,8 @@ initialize wantNew root = do
     return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf, cacheTags = cache }
   where quarryHashFSConf = HFS.makeConfSHA512 [2] HFS.OutputHex root
 
-importFile :: ImportType -> DataCategory -> Maybe POSIXTime -> [Tag] -> FilePath -> QuarryM (QuarryDigest,Bool)
-importFile itype dataCat mDate tags rfile = do
+importFile :: ImportType -> DataCategory -> Maybe POSIXTime -> Maybe FilePath -> [Tag] -> FilePath -> QuarryM (QuarryDigest,Bool)
+importFile itype dataCat mDate mFilename tags rfile = do
     current <- liftIO getCurrentDirectory
     let file = if isRelative rfile then current </> rfile else rfile
     fstat <- liftIO $ getFileStatus file
@@ -82,7 +82,7 @@ importFile itype dataCat mDate tags rfile = do
         Nothing -> do
             ty <- liftIO $ autoFileType file
             let info = (fromIntegral $ fileSize fstat, realToFrac $ modificationTime fstat)
-            k  <- dbAddFile digest dataCat file mDate info ty
+            k  <- dbAddFile digest dataCat (maybe file id mFilename) mDate info ty
             when (not $ null tags) $ do
                 mapM_ (dbCreateTag >=> dbAddTag k) tags
             dbCommit

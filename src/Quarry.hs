@@ -84,21 +84,23 @@ cmdImport args = do
             , Option [] ["hardlink"] (NoArg (ImportTy ImportHardlink)) "use a hardlink to import into the hashfs"
             , Option ['d'] ["date"] (ReqArg ImportDate "date") "add a date in posix seconds"
             , Option ['t'] ["tag"] (ReqArg ImportTag "tag") "add a tag"
+            , Option ['f'] ["filename"] (ReqArg ImportFilename "filename") "override the filename"
             ]
         hardcodedDataCat = CategoryPersonal
         doImport optArgs path file = do
-            let (date,tags,ity) = foldl (\acc@(d,accTags,t) f -> case f of
-                                                        ImportTy ty   -> (d,accTags,ty)
-                                                        ImportDate da -> (read da,accTags,t)
-                                                        ImportTag ta  -> (d,ta:accTags,t)
-                                                        _             -> acc) (0 :: Word64, [], ImportCopy) optArgs
+            let (date,tags,mFilename,ity) = foldl (\acc@(d,accTags,accFile,t) f -> case f of
+                                                        ImportTy ty   -> (d,accTags,accFile,ty)
+                                                        ImportDate da -> (read da,accTags,accFile,t)
+                                                        ImportTag ta  -> (d,ta:accTags,accFile,t)
+                                                        ImportFilename fi -> (d,accTags,Just fi,t)
+                                                        _             -> acc) (0 :: Word64, [], Nothing, ImportCopy) optArgs
             let mDate = case date of
                             0 -> Nothing
                             _ -> Just $ fromIntegral date
             conf   <- initialize False path
             (digest,isNew) <- runQuarry conf $ do
                 addTags <- catMaybes <$> mapM resolveAddTag tags
-                importFile ity hardcodedDataCat mDate addTags file
+                importFile ity hardcodedDataCat mDate (("/old/" ++) `fmap` mFilename) addTags file
             if isNew
                 then putStrLn (show digest)
                 else hPutStrLn stderr (show digest ++ " already existing ")
