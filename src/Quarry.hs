@@ -13,11 +13,11 @@ import Data.List
 import Data.Maybe
 import System.IO
 
-data SubCommand = Init | Import | Set | Get | Find | Tags | Cats | Info
+data SubCommand = Init | Import | Set | Get | Find | Tags | Cats | Info | Exist
     deriving (Show,Eq)
 data InitOpt = InitHelp
     deriving (Show,Eq)
-data ImportOpt = ImportHelp | ImportTy ImportType | ImportDate String | ImportTag String
+data ImportOpt = ImportHelp | ImportTy ImportType | ImportDate String | ImportTag String | ImportFilename String
     deriving (Show,Eq)
 data FindOpt = FindHelp
     deriving (Show,Eq)
@@ -33,6 +33,7 @@ usage Get    = error "usage: quarry get <repository-path> <digest>"
 usage Find   = error "usage: quarry find <repository-path> <query>"
 usage Tags   = error "usage: quarry tags [--category <category>] <repository-path> <tag prefix> ..."
 usage Cats   = error "usage: quarry cats <add|list> <repository-path> <cat prefix> ..."
+usage Exist  = error "usage: quarry exists <repository-path> <file> ..."
 usage Info   = error "usage: quarry info <repository-path>"
 
 reportOptError errOpts
@@ -166,6 +167,23 @@ cmdTags args = do
                     tags <- findTags (Just s) cat
                     mapM_ (liftIO . putStrLn . show) tags
 
+cmdExist args = do
+    case args of
+        path:f1:fs -> doExist path (f1:fs)
+        _          -> usage Exist
+  where doExist path filenames = do
+            conf <- initialize False path
+            runQuarry conf $
+                mapM_ check filenames
+        check filename = do
+            d <- computeDigest filename
+            x <- exist d
+            liftIO $ do
+                putStr filename
+                if x
+                    then putStrLn (" " ++ show d)
+                    else putStrLn " [MISSING]"
+
 cmdCats args = do
     let (optArgs, nonOpts, errOpts) = getOpt Permute options args
     when (CatsHelp `elem` optArgs) $ do usage Cats >> exitSuccess
@@ -174,7 +192,7 @@ cmdCats args = do
         []         -> usage Cats
         "add":path:name:[] -> doCatAdd optArgs path name
         "list":path:_      -> doCats optArgs path
-        cmd:_              -> error ("error unknown sub command " ++ cmd ++ " in cats: expected list or add")
+        _:_                -> error ("error unknown sub command " ++ show nonOpts ++ " in cats: expected list or add")
   where options =
             [ Option ['h'] ["help"] (NoArg CatsHelp) "show help"
             ]
@@ -233,6 +251,8 @@ commands =
         ( cmdFind
         , "find contents by query"
         )
+      )
+    , ("exist", (cmdExist, "check if some file already exist")
       )
     , ("info",
         ( cmdInfo

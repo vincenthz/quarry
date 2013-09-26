@@ -16,6 +16,8 @@ module Tools.Quarry
     , findDigestWithTags
     , readDigest
     , findTags
+    , exist
+    , computeDigest
     , addCategory
     , QuarryInfo(..)
     , getInfo
@@ -52,6 +54,11 @@ runHFS :: HFS.HashFS SHA512 a -> QuarryM a
 runHFS f = ask >>= \conf -> liftIO $ HFS.run f (hashfsConf conf)
 
 --getRootPath = runHFS (HFS.hashfsRoot <$> ask)
+exist :: QuarryDigest -> QuarryM Bool
+exist digest = runHFS (maybe False (const True) <$> HFS.readInfo digest)
+
+computeDigest :: FilePath -> QuarryM QuarryDigest
+computeDigest file = runHFS (HFS.computeHash file)
 
 initialize :: Bool -> FilePath -> IO QuarryConfig
 initialize wantNew root = do
