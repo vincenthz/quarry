@@ -137,6 +137,7 @@ getCategoryTable = dbGetCategories
 addCategory :: Category -> QuarryM ()
 addCategory cat = do
     _ <- dbCreateCategory cat
+    dbCommit
     return ()
 
 data QuarryInfo = QuarryInfo
