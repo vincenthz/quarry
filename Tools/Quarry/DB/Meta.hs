@@ -38,7 +38,7 @@ dbCreateCategory cat = do
                         stmt <- prepare conn queryInsertCat
                         KeyCategory <$> insertAndGetID conn stmt [toSql cat]
         Just t  -> return t
-  where queryInsertCat = "INSERT INTO cat (name, abstract) VALUES (?, 1)"
+  where queryInsertCat = "INSERT INTO category (name, abstract) VALUES (?, 1)"
 
 -- | Try to find the key associated to a Tag
 --
