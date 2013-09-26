@@ -4,7 +4,7 @@ import System.Exit
 import System.Environment
 import System.Console.GetOpt
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, unless)
 import Control.Monad.Trans
 import Control.Applicative ((<$>))
 import Tools.Quarry
@@ -24,6 +24,8 @@ data FindOpt = FindHelp
 data TagOpt = TagHelp | TagCategory String
     deriving (Show,Eq)
 data CatsOpt = CatsHelp
+    deriving (Show,Eq)
+data ExistOpt = ExistHelp | ExistMissing | ExistAlready
     deriving (Show,Eq)
 
 usage Init   = error "usage: quarry init <repository-path>"
@@ -168,21 +170,36 @@ cmdTags args = do
                     mapM_ (liftIO . putStrLn . show) tags
 
 cmdExist args = do
-    case args of
-        path:f1:fs -> doExist path (f1:fs)
+    let (optArgs, nonOpts, errOpts) = getOpt Permute options args
+    when (ExistHelp `elem` optArgs) $ do usage Exist >> exitSuccess
+    when (ExistMissing `elem` optArgs &&
+          ExistAlready `elem` optArgs) $
+        putStrLn "cannot specify missing and exist at the same time" >> exitFailure
+    reportOptError errOpts
+    case nonOpts of
+        path:f1:fs -> doExist optArgs path (f1:fs)
         _          -> usage Exist
-  where doExist path filenames = do
+  where options =
+            [ Option ['h'] ["help"] (NoArg ExistHelp) "show help"
+            , Option ['m'] ["missing"] (NoArg ExistMissing) "show only missing file from the store"
+            , Option ['e'] ["exist"] (NoArg ExistAlready) "show only already existing file in the store"
+            ]
+        doExist optArgs path filenames = do
             conf <- initialize False path
             runQuarry conf $
-                mapM_ check filenames
-        check filename = do
+                mapM_ (check optArgs) filenames
+        check optArgs filename = do
             d <- computeDigest filename
             x <- exist d
             liftIO $ do
-                putStr filename
-                if x
-                    then putStrLn (" " ++ show d)
-                    else putStrLn " [MISSING]"
+                case (ExistAlready `elem` optArgs, ExistMissing `elem` optArgs) of
+                    (True, True)   -> error "impossible"
+                    (False, True)  -> when x $ putStrLn filename 
+                    (True, False)  -> unless x $ putStrLn filename 
+                    (False, False) ->
+                        if x
+                            then putStrLn (filename ++ " " ++ show d)
+                            else putStrLn (filename ++ " MISSING")
 
 cmdCats args = do
     let (optArgs, nonOpts, errOpts) = getOpt Permute options args
