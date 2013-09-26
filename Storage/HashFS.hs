@@ -38,7 +38,7 @@ import System.IO hiding (readFile)
 import Prelude hiding (readFile)
 import Data.Time.Clock.POSIX (POSIXTime)
 
-import System.Directory (createDirectory, removeFile, doesDirectoryExist, doesFileExist, getDirectoryContents)
+import System.Directory (createDirectoryIfMissing, removeFile, doesDirectoryExist, doesFileExist, getDirectoryContents)
 import System.FilePath ((</>), dropTrailingPathSeparator, dropFileName)
 import System.Posix.Files hiding (isDirectory)
 
@@ -73,7 +73,7 @@ createHier hsh = do
     let spath = getDigestSplitPath conf hsh
     -- FIXME do it recursively, as it depends on the configured depth
     destPath <- getPath hsh
-    when (length spath > 1) $ liftIO $ createDirectory (dropFileName $ dropTrailingPathSeparator destPath)
+    when (length spath > 1) $ liftIO $ createDirectoryIfMissing True (dropFileName $ dropTrailingPathSeparator destPath)
 
 -- | Copy a file to the necessary digest
 copyFileToHash :: HashAlgorithm h
