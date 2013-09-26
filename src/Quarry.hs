@@ -127,7 +127,7 @@ cmdSet args =
                 _         -> (a,d)
 
 cmdGet _ =
-    undefined
+    error ("get not implemented")
 
 cmdFind args = do
     let (optArgs, nonOpts, errOpts) = getOpt Permute options args
