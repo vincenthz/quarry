@@ -19,7 +19,7 @@ dbCreateTag tag = do
     case mt of
         Nothing -> do cat <- dbFindCategory (tagCat tag)
                       case cat of
-                            Nothing -> undefined
+                            Nothing -> error ("createTag: " ++ show tag ++ " : cannot find category")
                             Just c  -> withDB $ \conn -> liftIO $ do
                                         stmt <- prepare conn queryInsertTag
                                         KeyTag <$> insertAndGetID conn stmt [toSql (tagName tag), toSql $ getPrimaryKey c]
