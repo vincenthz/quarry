@@ -12,8 +12,9 @@ import Data.Word
 import Data.List
 import Data.Maybe
 import System.IO
+import System.Process
 
-data SubCommand = Init | Import | Set | Get | Find | Tags | Cats | Info | Exist
+data SubCommand = Init | Import | Set | Get | Find | Tags | Cats | Info | Exist | View
     deriving (Show,Eq)
 data InitOpt = InitHelp
     deriving (Show,Eq)
@@ -27,6 +28,8 @@ data CatsOpt = CatsHelp
     deriving (Show,Eq)
 data ExistOpt = ExistHelp | ExistMissing | ExistAlready
     deriving (Show,Eq)
+data ViewOpt = ViewHelp
+    deriving (Show,Eq)
 
 usage Init   = error "usage: quarry init <repository-path>"
 usage Import = error "usage: quarry import <repository-path> <file>"
@@ -37,6 +40,7 @@ usage Tags   = error "usage: quarry tags [--category <category>] <repository-pat
 usage Cats   = error "usage: quarry cats <add|list> <repository-path> <cat prefix> ..."
 usage Exist  = error "usage: quarry exists <repository-path> <file> ..."
 usage Info   = error "usage: quarry info <repository-path>"
+usage View   = error "usage: quarry view <repository-path> <digest>"
 
 reportOptError errOpts
     | null errOpts = return ()
@@ -232,6 +236,24 @@ cmdInfo args = do
             putStrLn ("files      : " ++ show (infoNFile info))
             putStrLn ("tags       : " ++ show (infoNTag info))
             putStrLn ("categories : " ++ show (infoNCategory info))
+
+cmdView args = do
+    case args of
+        path:digests -> doView path digests
+        _            -> usage View
+  where doView path digests_ = do
+            let digests = catMaybes $ map readDigest digests_
+            conf <- initialize False path
+            l    <- runQuarry conf $ mapM getPathAndType $ digests
+            forM_ l $ \(p, ty) -> do
+                case ty of
+                    QuarryTypeImage -> do ec <- rawSystem "eog" [p]
+                                          unless (ec == ExitSuccess) $ exitWith ec
+                    _               -> putStrLn (show ty ++ " " ++ show p)
+        getPathAndType digest = do
+            path <- getDigestPath digest
+            ty   <- getQuarryFileType path
+            return (path, ty)
 
 commands =
     [ ("init",

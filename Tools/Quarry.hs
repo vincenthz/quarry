@@ -7,6 +7,8 @@ module Tools.Quarry
     , ImportType(..)
     , DataCategory(..)
     , QuarryConfig
+    , QuarryFileType(..)
+    , getQuarryFileType
     , runQuarry
     , importFile
     , updateDigest
@@ -88,7 +90,7 @@ importFile itype dataCat mDate mFilename tags rfile = do
     key <- dbResolveDigest digest
     case key of
         Nothing -> do
-            ty <- liftIO $ autoFileType file
+            ty <- getQuarryFileType file
             let info = (fromIntegral $ fileSize fstat, realToFrac $ modificationTime fstat)
             k  <- dbAddFile digest dataCat (maybe file id mFilename) mDate info ty
             when (not $ null tags) $ do
@@ -96,14 +98,19 @@ importFile itype dataCat mDate mFilename tags rfile = do
             dbCommit
             return (digest, True)
         Just _ -> return (digest, False)
-  where autoFileType path = toQuarryFileType <$> getFileformat path
-        toQuarryFileType ft = case ft of
+
+getQuarryFileType :: FilePath -> QuarryM QuarryFileType
+getQuarryFileType path = liftIO (toQuarryFileType <$> getFileformat path)
+  where toQuarryFileType ft = case ft of
                 FT_JPEG   -> QuarryTypeImage
+                FT_JPEG_EXIF -> QuarryTypeImage
+                FT_JFIF_EXIF -> QuarryTypeImage
                 FT_PNG    -> QuarryTypeImage
                 FT_PDF _  -> QuarryTypeDocument
                 FT_MP3    -> QuarryTypeSound
                 FT_OGG    -> QuarryTypeSound
-                FT_RIFF   -> QuarryTypeImage -- webp .. could be avi !
+                --FT_RIFF   -> QuarryTypeImage -- webp .. could be video !
+                FT_AVI    -> QuarryTypeVideo
                 FT_Text   -> QuarryTypeDocument
                 _         -> QuarryTypeUnknown
 
