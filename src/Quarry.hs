@@ -256,48 +256,16 @@ cmdView args = do
             return (path, ty)
 
 commands =
-    [ ("init",
-        ( cmdInit
-        , "initialize a repository"
-        )
-      )
-    , ("import",
-        ( cmdImport
-        , "import a file into quarry"
-        )
-      )
-    , ("set",
-        ( cmdSet
-        , "set some metadata"
-        )
-      )
-    , ("tags",
-        ( cmdTags
-        , "list tags"
-        )
-      )
-    , ("cats",
-        ( cmdCats
-        , "list categories"
-        )
-      )
-    , ("get",
-        ( cmdGet
-        , "get some metadata"
-        )
-      )
-    , ("find",
-        ( cmdFind
-        , "find contents by query"
-        )
-      )
-    , ("exist", (cmdExist, "check if some file already exist")
-      )
-    , ("info",
-        ( cmdInfo
-        , "get quarry general state information"
-        )
-      )
+    [ ("init"  , (cmdInit, "initialize a repository"))
+    , ("import", (cmdImport, "import a file into quarry"))
+    , ("set"   , (cmdSet, "set some metadata"))
+    , ("tags"  , (cmdTags, "list tags"))
+    , ("cats"  , (cmdCats, "list categories"))
+    , ("get"   , (cmdGet, "get some metadata"))
+    , ("find"  , (cmdFind, "find contents by query"))
+    , ("exist" , (cmdExist, "check if some file already exist"))
+    , ("info"  , (cmdInfo, "get quarry general state information"))
+    , ("view"  , (cmdView, "use a viewer on digest"))
     ]
 
 main = do
