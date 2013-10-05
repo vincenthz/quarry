@@ -19,6 +19,7 @@ module Storage.HashFS
     , verify
     , exists
     , iterateFiles
+    , getPath
     ) where
 
 import Data.Word (Word64)

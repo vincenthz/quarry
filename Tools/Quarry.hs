@@ -12,6 +12,7 @@ module Tools.Quarry
     , updateDigest
     , resolveDigest
     , resolveTag
+    , getDigestPath
     , getCategoryTable
     , findDigestWithTags
     , readDigest
@@ -126,6 +127,10 @@ resolveTag (Left tname) = do
         [(cat,tname2)] -> dbResolveKeyCategory cat >>= \c -> return $ Just $ Tag { tagCat = c, tagName = tname2 }
         _              -> return Nothing
 resolveTag (Right tag) = return $ Just tag
+
+-- | Return the path where the digest is stored
+getDigestPath :: QuarryDigest -> QuarryM FilePath
+getDigestPath = runHFS . HFS.getPath
 
 findDigestWithTags :: [Tag] -> QuarryM [QuarryDigest]
 findDigestWithTags tags = dbFindWithTags tags
