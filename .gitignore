@@ -1,6 +1,6 @@
-\*.o
-\*.hi
-\*.tix
-\*.mix
+*.o
+*.hi
+*.tix
+*.mix
 dist
 t/*
