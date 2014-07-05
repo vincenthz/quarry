@@ -1,5 +1,8 @@
+-- Quarry main module
+--
 module Tools.Quarry
     ( initialize
+    -- * Types
     , KeyCategory
     , KeyTag
     , TagName
@@ -8,6 +11,7 @@ module Tools.Quarry
     , DataCategory(..)
     , QuarryConfig
     , QuarryFileType(..)
+    -- * Methods
     , getQuarryFileType
     , runQuarry
     , importFile
@@ -50,20 +54,32 @@ import Tools.Quarry.DB
 import Tools.Quarry.DBHelper
 import Data.FileFormat
 
+-- | Try to transform a string into a digest
 readDigest :: String -> Maybe QuarryDigest
 readDigest s = HFS.inputDigest HFS.OutputHex s
 
+-- | Run an HashFS monad operation on top of Quarry.
 runHFS :: HFS.HashFS SHA512 a -> QuarryM a
 runHFS f = ask >>= \conf -> liftIO $ HFS.run f (hashfsConf conf)
 
 --getRootPath = runHFS (HFS.hashfsRoot <$> ask)
+
+-- | Check if the digest already exists in the database
 exist :: QuarryDigest -> QuarryM Bool
 exist digest = runHFS (maybe False (const True) <$> HFS.readInfo digest)
 
+-- | Compute the digest associated with a file
 computeDigest :: FilePath -> QuarryM QuarryDigest
 computeDigest file = runHFS (HFS.computeHash file)
 
-initialize :: Bool -> FilePath -> IO QuarryConfig
+-- | initialize a new quarry database object.
+--
+-- The user has the choice to init the storage.
+-- if the storage is already initialized then an error will be returned,
+-- otherwise it will errors out if the path doesn't looks like a valid quarry database.
+initialize :: Bool            -- ^ if we initialize the storage or not
+           -> FilePath        -- ^ The filepath of the database
+           -> IO QuarryConfig -- ^ the config read
 initialize wantNew root = do
     hasDb <- doesFileExist (dbFile root)
     if wantNew
@@ -76,7 +92,15 @@ initialize wantNew root = do
     return $ QuarryConfig { connection = conn, hashfsConf = quarryHashFSConf, cacheTags = cache }
   where quarryHashFSConf = HFS.makeConfSHA512 [2] HFS.OutputHex root
 
-importFile :: ImportType -> DataCategory -> Maybe POSIXTime -> Maybe FilePath -> [Tag] -> FilePath -> QuarryM (QuarryDigest,Bool)
+-- | Import an element into quarry and returns the digest associated
+-- and if the element has been created or updated.
+importFile :: ImportType      -- ^ Whether to copy/symlink/hardlink ..
+           -> DataCategory    -- ^ Category of data (video,book,..)
+           -> Maybe POSIXTime -- ^ An optional associated date
+           -> Maybe FilePath  -- ^ Alternative name to import the file to
+           -> [Tag]           -- ^ Tags to add to this file
+           -> FilePath        -- ^ Path to the file
+           -> QuarryM (QuarryDigest,Bool)
 importFile itype dataCat mDate mFilename tags rfile = do
     current <- liftIO getCurrentDirectory
     let file = if isRelative rfile then current </> rfile else rfile
@@ -99,6 +123,7 @@ importFile itype dataCat mDate mFilename tags rfile = do
             return (digest, True)
         Just _ -> return (digest, False)
 
+-- | Return the associated filetype with a file
 getQuarryFileType :: FilePath -> QuarryM QuarryFileType
 getQuarryFileType path = liftIO (toQuarryFileType <$> getFileformat path)
   where toQuarryFileType ft = case ft of
@@ -114,7 +139,11 @@ getQuarryFileType path = liftIO (toQuarryFileType <$> getFileformat path)
                 FT_Text   -> QuarryTypeDocument
                 _         -> QuarryTypeUnknown
 
-updateDigest :: QuarryDigest -> [Tag] -> [Tag] -> QuarryM  ()
+-- | Update a specific digest by adding tags and/or removing tags
+updateDigest :: QuarryDigest -- ^ Digest to update
+             -> [Tag]        -- ^ Tags to add
+             -> [Tag]        -- ^ Tags to remove
+             -> QuarryM ()
 updateDigest digest addTags delTags = do
     mfk <- dbResolveDigest digest
     case mfk of
@@ -124,9 +153,11 @@ updateDigest digest addTags delTags = do
             mapM_ (dbFindTag >=> maybe (return ()) (dbRemoveTag fk)) delTags
             dbCommit
 
+-- | Try to resolve a digest into a key data
 resolveDigest :: QuarryDigest -> QuarryM (Maybe KeyData)
 resolveDigest digest = dbResolveDigest digest
 
+-- | Try to resolve a tag name to a tag
 resolveTag :: Either TagName Tag -> QuarryM (Maybe Tag)
 resolveTag (Left tname) = do
     r <- dbFindTagsMatching (Just tname) Nothing
@@ -150,9 +181,13 @@ findTags s mcat =
     -- need ending by, contains, etc..
     dbFindTagsMatching s mcat
 
-getCategoryTable :: QuarryM [(KeyCategory,(Category,Bool))] 
+-- | Return the category table contents
+--
+-- >    | Key | Name | User |
+getCategoryTable :: QuarryM [(KeyCategory,(Category,Bool))]
 getCategoryTable = dbGetCategories
 
+-- | Add a new category
 addCategory :: Category -> QuarryM ()
 addCategory cat = do
     _ <- dbCreateCategory cat
@@ -165,6 +200,9 @@ data QuarryInfo = QuarryInfo
     , infoNCategory :: Word64
     } deriving (Show,Eq)
 
+-- | Return generic information about the quarry database.
+--
+-- For now, returns number of elements, tags, and categories.
 getInfo :: QuarryM QuarryInfo
 getInfo = withDB $ \conn -> liftIO $
     QuarryInfo <$> getCount conn tableData Nothing
