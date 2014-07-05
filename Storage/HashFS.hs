@@ -161,11 +161,11 @@ exists :: HashAlgorithm h => Digest h -> HashFS h Bool
 exists digest = onDigestFile digest (liftIO . doesFileExist)
 
 -- | try to read a file backed by a certain digest
-readFile :: HashAlgorithm h => Digest h => HashFS h (Maybe L.ByteString)
+readFile :: HashAlgorithm h => Digest h -> HashFS h (Maybe L.ByteString)
 readFile digest = onDigestFile digest (liftIO . catchIO . L.readFile)
 
 -- | get information about a specific Digest, namely size and mtime
-readInfo :: HashAlgorithm h => Digest h => HashFS h (Maybe (Word64, POSIXTime))
+readInfo :: HashAlgorithm h => Digest h -> HashFS h (Maybe (Word64, POSIXTime))
 readInfo digest = onDigestFile digest (\path -> liftIO $ catchIO (toInfo <$> getFileStatus path))
   where toInfo fstat = (fromIntegral $ fileSize fstat, realToFrac $ modificationTime fstat)
 
